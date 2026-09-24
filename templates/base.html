@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <title>{{ page_title }} · Smart Attendance</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
+</head>
+<body class="app-shell" data-page="{{ nav|default('') }}">
+  <aside class="sidebar" id="sidebar">
+    <a class="brand" href="{{ url_for('dashboard') }}">
+      <span class="brand-mark"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M7 16.5 13 22l12-13" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="16" cy="16" r="14" fill="none" stroke="currentColor" stroke-width="2"/></svg></span>
+      <span><strong>Attendly</strong><small>Campus workspace</small></span>
+    </a>
+    <div class="nav-label">WORKSPACE</div>
+    <nav class="side-nav" aria-label="Main navigation">
+      <a class="nav-link {{ 'is-active' if nav == 'dashboard' else '' }}" href="{{ url_for('dashboard') }}"><span class="nav-icon">◫</span> Overview</a>
+      <a class="nav-link {{ 'is-active' if nav == 'students' else '' }}" href="{{ url_for('students') }}"><span class="nav-icon">♧</span> Students</a>
+      <a class="nav-link {{ 'is-active' if nav == 'attendance' else '' }}" href="{{ url_for('attendance') }}"><span class="nav-icon">◷</span> Attendance</a>
+      <a class="nav-link {{ 'is-active' if nav == 'reports' else '' }}" href="{{ url_for('reports') }}"><span class="nav-icon">▥</span> Reports</a>
+      <a class="nav-link {{ 'is-active' if nav == 'model' else '' }}" href="{{ url_for('model_page') }}"><span class="nav-icon">⌘</span> Face model <span class="nav-badge">AI</span></a>
+    </nav>
+    <div class="nav-label nav-label-lower">LEARN</div>
+    <nav class="side-nav" aria-label="Project documentation">
+      <a class="nav-link {{ 'is-active' if nav == 'guide' else '' }}" href="{{ url_for('guide') }}"><span class="nav-icon">▤</span> Project guide</a>
+    </nav>
+    <div class="sidebar-spacer"></div>
+    <div class="privacy-card"><span class="privacy-dot"></span><div><strong>Local &amp; private</strong><small>Your data stays on this device</small></div></div>
+    <div class="sidebar-user">
+      <span class="avatar">{{ active_admin[:1]|upper }}</span><div class="user-label"><strong>{{ active_admin }}</strong><small>Administrator</small></div>
+      <form method="post" action="{{ url_for('logout') }}" class="logout-form"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="icon-button" type="submit" aria-label="Sign out" title="Sign out">↗</button></form>
+    </div>
+  </aside>
+  <main class="main-shell">
+    <header class="topbar">
+      <button class="mobile-menu icon-button" id="mobile-menu" aria-label="Open navigation">☰</button>
+      <div class="breadcrumbs"><span>Attendly</span><span class="crumb-sep">/</span><strong>{{ page_title }}</strong></div>
+      <div class="topbar-right"><span class="live-indicator"><i></i> SYSTEM ONLINE</span><a class="topbar-settings" href="{{ url_for('settings') }}" title="Settings" aria-label="Settings">⚙</a><span class="topbar-avatar">{{ active_admin[:1]|upper }}</span></div>
+    </header>
+    <section class="page-content">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}<div class="flash-stack">{% for category, message in messages %}<div class="flash flash-{{ category }}" role="status"><span>{{ '✓' if category == 'success' else 'i' if category == 'info' else '!' }}</span>{{ message }}<button class="flash-close" type="button" aria-label="Dismiss">×</button></div>{% endfor %}</div>{% endif %}
+      {% endwith %}
+      {% block content %}{% endblock %}
+      <footer class="page-footer"><span>Attendly · Smart Attendance System</span><span>Built for learning &nbsp;·&nbsp; SQLite local storage</span></footer>
+    </section>
+  </main>
+</body>
+</html>
