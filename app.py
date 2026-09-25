@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import csv
 import hmac
 import io
 import json
@@ -11,12 +12,12 @@ import re
 import secrets
 import subprocess
 import sys
+from collections import Counter
 from datetime import date, datetime, timedelta
 from functools import wraps
 from pathlib import Path
 
 import cv2
-import pandas as pd
 from flask import (
     Flask, Response, abort, flash, jsonify, redirect, render_template, request,
     send_from_directory, session, url_for,
@@ -26,8 +27,12 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from database import BASE_DIR, connect_db, get_student_by_university_id, init_db, record_attendance
 from face_engine import detect_single_face, model_ready, recognize
 
-DATASET_DIR = BASE_DIR / "dataset"
-MODEL_DIR = BASE_DIR / "model"
+if os.environ.get("VERCEL"):
+    DATASET_DIR = Path("/tmp/dataset")
+    MODEL_DIR = Path("/tmp/model")
+else:
+    DATASET_DIR = BASE_DIR / "dataset"
+    MODEL_DIR = BASE_DIR / "model"
 TRAINING_PROCESS: subprocess.Popen | None = None
 
 app = Flask(__name__)
@@ -392,12 +397,20 @@ def export_attendance():
     end_date = safe_date(request.args.get("end"), today)
     search = request.args.get("q", "").strip()
     rows = attendance_query(start_date.isoformat(), end_date.isoformat(), search)
-    frame = pd.DataFrame([dict(row) for row in rows], columns=[
-        "attendance_id", "attendance_date", "attendance_time", "status", "method", "university_id", "name", "program"
-    ])
-    frame = frame.rename(columns={"attendance_id": "record_id", "attendance_date": "date", "attendance_time": "time"})
     output = io.StringIO()
-    frame.to_csv(output, index=False)
+    writer = csv.writer(output)
+    writer.writerow(["record_id", "date", "time", "status", "method", "university_id", "name", "program"])
+    for row in rows:
+        writer.writerow([
+            row["attendance_id"],
+            row["attendance_date"],
+            row["attendance_time"],
+            row["status"],
+            row["method"],
+            row["university_id"],
+            row["name"],
+            row["program"],
+        ])
     return Response(output.getvalue(), mimetype="text/csv",
                     headers={"Content-Disposition": f"attachment; filename=attendance-{start_date}-{end_date}.csv"})
 
@@ -412,13 +425,12 @@ def reports():
     if start_date > end_date:
         start_date, end_date = end_date, start_date
     rows = attendance_query(start_date.isoformat(), end_date.isoformat())
-    frame = pd.DataFrame([dict(row) for row in rows])
-    if frame.empty:
+    if not rows:
         daily = []
         students_summary = []
         total_records = 0
     else:
-        per_day = frame.groupby("attendance_date").size().to_dict()
+        per_day = Counter(row["attendance_date"] for row in rows)
         dates = []
         current = start_date
         while current <= end_date:
@@ -426,16 +438,22 @@ def reports():
                 dates.append(current)
             current += timedelta(days=1)
         daily = [{"label": day.strftime("%d %b"), "count": int(per_day.get(day.isoformat(), 0))} for day in dates]
-        summary = frame.groupby(["university_id", "name"]).size().reset_index(name="days_present")
-        active_count = query_one("SELECT COUNT(*) AS n FROM students WHERE status = 'active'")["n"]
+
+        # Group count by (university_id, name)
+        student_counts = Counter((row["university_id"], row["name"]) for row in rows)
         denominator = sum(1 for offset in range((end_date - start_date).days + 1)
                           if (start_date + timedelta(days=offset)).weekday() < 5)
         students_summary = []
-        for row in summary.to_dict(orient="records"):
-            rate = min(100, round(row["days_present"] / denominator * 100)) if denominator else 0
-            students_summary.append({**row, "rate": rate})
+        for (uid, name), count in student_counts.items():
+            rate = min(100, round(count / denominator * 100)) if denominator else 0
+            students_summary.append({
+                "university_id": uid,
+                "name": name,
+                "days_present": count,
+                "rate": rate,
+            })
         students_summary.sort(key=lambda row: (-row["rate"], row["name"]))
-        total_records = len(frame)
+        total_records = len(rows)
     active_count = query_one("SELECT COUNT(*) AS n FROM students WHERE status = 'active'")["n"]
     weekday_count = sum(1 for offset in range((end_date - start_date).days + 1)
                         if (start_date + timedelta(days=offset)).weekday() < 5)

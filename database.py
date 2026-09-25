@@ -12,7 +12,10 @@ from typing import Iterator
 from werkzeug.security import generate_password_hash
 
 BASE_DIR = Path(__file__).resolve().parent
-INSTANCE_DIR = BASE_DIR / "instance"
+if os.environ.get("VERCEL"):
+    INSTANCE_DIR = Path("/tmp")
+else:
+    INSTANCE_DIR = BASE_DIR / "instance"
 DATABASE_PATH = Path(os.environ.get("ATTENDANCE_DB", INSTANCE_DIR / "smart_attendance.db"))
 
 

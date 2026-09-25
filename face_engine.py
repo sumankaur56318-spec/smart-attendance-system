@@ -3,14 +3,22 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
-import cv2
+try:
+    import cv2
+except ImportError:
+    cv2 = None
 import numpy as np
 
 BASE_DIR = Path(__file__).resolve().parent
-MODEL_PATH = BASE_DIR / "model" / "attendance_cnn.keras"
-LABELS_PATH = BASE_DIR / "model" / "labels.json"
+if os.environ.get("VERCEL"):
+    MODEL_DIR = Path("/tmp/model")
+else:
+    MODEL_DIR = BASE_DIR / "model"
+MODEL_PATH = MODEL_DIR / "attendance_cnn.keras"
+LABELS_PATH = MODEL_DIR / "labels.json"
 IMAGE_SIZE = 64
 
 _classifier = None
@@ -21,7 +29,7 @@ _loaded_model_mtime: int | None = None
 
 def detect_single_face(image: np.ndarray) -> tuple[np.ndarray | None, tuple[int, int, int, int] | None]:
     """Return one resized color face crop; reject empty or multi-person frames."""
-    if image is None or image.size == 0:
+    if cv2 is None or image is None or image.size == 0:
         return None, None
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     global _classifier
@@ -50,7 +58,13 @@ def _load_model() -> None:
         raise RuntimeError("Train the CNN model first. Capture at least five face images per active student.")
     model_mtime = MODEL_PATH.stat().st_mtime_ns
     if _model is None or model_mtime != _loaded_model_mtime:
-        from tensorflow.keras.models import load_model
+        try:
+            from tensorflow.keras.models import load_model
+        except ImportError:
+            raise RuntimeError(
+                "TensorFlow is required for offline CNN inference. "
+                "For cloud deployments without GPU/TensorFlow, use manual ID check-in."
+            )
 
         _model = load_model(MODEL_PATH)
         _labels = json.loads(LABELS_PATH.read_text(encoding="utf-8"))["university_ids"]
